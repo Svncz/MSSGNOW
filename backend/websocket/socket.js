@@ -7,6 +7,14 @@ let clients = new Map(); // userId → ws
 function initSocket(server) {
   const wss = new WebSocket.Server({ server });
 
+  function broadcastOnlineUsers() {
+    const userIds = Array.from(clients.keys());
+    const msg = JSON.stringify({ type: 'online_users', userIds });
+    wss.clients.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+    });
+  }
+
   wss.on("connection", (ws) => {
     console.log("🟢 Cliente conectado (Esperando auth simplificada...)");
 
@@ -16,7 +24,6 @@ function initSocket(server) {
 
         switch (data.type) {
 
-          // 🔐 IDENTIFICACIÓN POR WEBSOCKET (Simple sin JWT)
           case "auth":
             if (!data.userId) {
               return ws.send(JSON.stringify({ type: "error", message: "User ID requerido" }));
@@ -26,11 +33,11 @@ function initSocket(server) {
             clients.set(userId, ws);
             ws.userId = userId;
 
-            // Actualizar last_seen
             await db.query("UPDATE users SET last_seen = NOW() WHERE id = ?", [userId]);
 
             ws.send(JSON.stringify({ type: "auth_success", userId }));
             console.log(`🔐 Usuario ${userId} autenticado en WebSocket`);
+            broadcastOnlineUsers(); // 📡 Notificar a todos
             break;
 
           // 📨 ENVIAR MENSAJE (texto, imagen, audio)
@@ -81,7 +88,7 @@ function initSocket(server) {
       if (ws.userId) {
         clients.delete(ws.userId);
         console.log(`🔴 Usuario ${ws.userId} desconectado`);
-        
+        broadcastOnlineUsers(); // 📡 Notificar a todos
         try {
           await db.query("UPDATE users SET last_seen = NOW() WHERE id = ?", [ws.userId]);
         } catch (err) {

@@ -1,272 +1,393 @@
 const API_URL = CONFIG.API_URL;
 const WS_URL  = CONFIG.WS_URL;
+const BASE_URL = API_URL.replace('/api', ''); // for media files
 
 let socket;
 let currentUser = null;
 let currentChatId = null;
+let allChats = [];
+let onlineUsers = new Set();
+let activeContextMenu = null;
 
 // UI Elements
 const chatListContainer = document.getElementById("chat-list-container");
-const activeChatScreen = document.getElementById("active-chat-screen");
-const noChatScreen = document.getElementById("no-chat-screen");
+const activeChatScreen  = document.getElementById("active-chat-screen");
+const noChatScreen      = document.getElementById("no-chat-screen");
 const messagesContainer = document.getElementById("messages-container");
-const messageInput = document.getElementById("message-input");
-const sendMsgBtn = document.getElementById("send-msg-btn");
-const attachBtn = document.getElementById("attach-btn");
-const fileInput = document.getElementById("file-input");
+const messageInput      = document.getElementById("message-input");
+const sendMsgBtn        = document.getElementById("send-msg-btn");
+const attachBtn         = document.getElementById("attach-btn");
+const fileInput         = document.getElementById("file-input");
+const chatSearchInput   = document.getElementById("chat-search");
 
-// Init
+// ─────────────────────────────────
+//  INIT
+// ─────────────────────────────────
 window.onload = () => {
-  const userDataString = localStorage.getItem("mssgnow_user");
-  if (!userDataString) {
-    window.location.href = "index.html";
-    return;
-  }
-  
-  currentUser = JSON.parse(userDataString);
+  const raw = localStorage.getItem("mssgnow_user");
+  if (!raw) { window.location.href = "index.html"; return; }
+
+  currentUser = JSON.parse(raw);
+  const avatarEl = document.getElementById("my-avatar");
   document.getElementById("my-username").textContent = currentUser.username;
-  
-  if (currentUser.profilePicUrl) {
-    document.getElementById("my-avatar").style.backgroundImage = `url(${currentUser.profilePicUrl})`;
-  } else {
-    document.getElementById("my-avatar").textContent = currentUser.username.charAt(0).toUpperCase();
-  }
+  avatarEl.textContent = currentUser.username.charAt(0).toUpperCase();
 
   initWebSocket();
   loadChats();
 };
 
-function logout() {
+document.getElementById("logout-btn").addEventListener("click", () => {
   localStorage.removeItem("mssgnow_user");
   if (socket) socket.close();
   window.location.href = "index.html";
-}
+});
 
-document.getElementById("logout-btn").addEventListener("click", logout);
-
-// --- WEBSOCKET LOGIC ---
+// ─────────────────────────────────
+//  WEBSOCKET
+// ─────────────────────────────────
 function initWebSocket() {
   socket = new WebSocket(WS_URL);
 
   socket.onopen = () => {
-    console.log("Conectado a WS");
-    socket.send(JSON.stringify({
-      type: "auth",
-      userId: currentUser.id
-    }));
+    socket.send(JSON.stringify({ type: "auth", userId: currentUser.id }));
   };
 
   socket.onmessage = (event) => {
-    const response = JSON.parse(event.data);
-
-    switch (response.type) {
+    const msg = JSON.parse(event.data);
+    switch (msg.type) {
       case "auth_success":
-        console.log("WebSocket autenticado");
+        console.log("🔐 WS autenticado");
         break;
-      
+
       case "receive_message":
-        const msg = response.data;
-        if (msg.chatId === currentChatId) {
-          appendMessage(msg);
-          scrollToBottom();
-          if (msg.senderId !== currentUser.id) {
-            socket.send(JSON.stringify({ type: "read", messageId: msg.id }));
-          }
-        } else {
-          if (msg.senderId !== currentUser.id) {
-            socket.send(JSON.stringify({ type: "delivered", messageId: msg.id }));
-          }
-        }
-        loadChats();
+        handleIncomingMessage(msg.data);
         break;
-        
+
+      case "online_users":
+        onlineUsers = new Set(msg.userIds);
+        updateOnlineStatus();
+        break;
+
       case "error":
-        console.error("WS Error:", response.message);
+        console.error("WS error:", msg.message);
         break;
     }
   };
 
-  socket.onclose = () => {
-    console.log("WS Desconectado, intentando reconectar en 3s...");
-    setTimeout(initWebSocket, 3000);
-  };
+  socket.onclose = () => setTimeout(initWebSocket, 3000);
 }
 
-// --- API ACTIONS ---
-async function fetchSimpleAuth(url, options = {}) {
-  const headers = {
-    'user-id': currentUser.id,
-    ...options.headers
-  };
-  
-  const response = await fetch(`${API_URL}${url}`, { ...options, headers });
-  
-  if (response.status === 401 || response.status === 403) {
-    logout();
-    throw new Error('Authentication failed');
+function handleIncomingMessage(data) {
+  if (data.chatId === currentChatId) {
+    appendMessage(data);
+    scrollToBottom();
+    if ((data.senderId || data.sender_id) !== currentUser.id) {
+      socket.send(JSON.stringify({ type: "read", messageId: data.id }));
+    }
+  } else {
+    if ((data.senderId || data.sender_id) !== currentUser.id) {
+      socket.send(JSON.stringify({ type: "delivered", messageId: data.id }));
+    }
   }
-  return response;
+  loadChats(); // refresh list silently
 }
 
-// Cargar lista de chats
+// ─────────────────────────────────
+//  API helper
+// ─────────────────────────────────
+async function fetchSimpleAuth(url, options = {}) {
+  const headers = { 'user-id': currentUser.id, ...options.headers };
+  const res = await fetch(`${API_URL}${url}`, { ...options, headers });
+  if (res.status === 401 || res.status === 403) {
+    localStorage.removeItem("mssgnow_user");
+    window.location.href = "index.html";
+    throw new Error("No autenticado");
+  }
+  return res;
+}
+
+// ─────────────────────────────────
+//  CHAT LIST
+// ─────────────────────────────────
 async function loadChats() {
   try {
     const res = await fetchSimpleAuth("/chats");
-    const chats = await res.json();
-    
-    chatListContainer.innerHTML = '';
-    
-    if (chats.length === 0) {
-      chatListContainer.innerHTML = '<div class="empty-chats">No se encontraron chats.<br>Recarga la página o inicia sesión de nuevo.</div>';
-      return;
-    }
-
-    chats.forEach(chat => {
-      const el = document.createElement("div");
-      el.className = "chat-item";
-      if (chat.id === currentChatId) el.classList.add("active");
-      
-      const initial = chat.name ? chat.name.charAt(0).toUpperCase() : '?';
-      
-      el.innerHTML = `
-        <div class="avatar">${initial}</div>
-        <div class="chat-item-info">
-          <div class="chat-item-top">
-            <span class="chat-item-name">${chat.name}</span>
-          </div>
-          <div class="chat-item-bottom">
-            <span class="chat-item-msg">Haz clic para ver los mensajes</span>
-          </div>
-        </div>
-      `;
-      
-      el.addEventListener('click', () => {
-        document.querySelectorAll(".chat-item").forEach(i => i.classList.remove("active"));
-        el.classList.add("active");
-        openChat(chat);
-      });
-      
-      chatListContainer.appendChild(el);
-    });
-    
+    allChats = await res.json();
+    renderChatList(allChats);
   } catch (err) {
     console.error("Error al cargar chats:", err);
   }
 }
 
-// Abrir chat
+function renderChatList(chats) {
+  chatListContainer.innerHTML = '';
+  if (chats.length === 0) {
+    chatListContainer.innerHTML = '<div class="empty-chats">No hay chats disponibles.</div>';
+    return;
+  }
+
+  chats.forEach(chat => {
+    const el = document.createElement("div");
+    el.className = "chat-item" + (chat.id === currentChatId ? " active" : "");
+    const initial = (chat.name || "?").charAt(0).toUpperCase();
+    const isGlobal = chat.type_name === 'global';
+
+    el.innerHTML = `
+      <div class="avatar${isGlobal ? ' avatar-global' : ''}">${initial}</div>
+      <div class="chat-item-info">
+        <div class="chat-item-top">
+          <span class="chat-item-name">${chat.name || 'Chat'}</span>
+          ${isGlobal ? '<span class="global-badge">🌎</span>' : ''}
+        </div>
+        <div class="chat-item-bottom">
+          <span class="chat-item-msg">Toca para abrir</span>
+        </div>
+      </div>
+    `;
+    el.addEventListener('click', () => {
+      document.querySelectorAll(".chat-item").forEach(i => i.classList.remove("active"));
+      el.classList.add("active");
+      openChat(chat);
+    });
+    chatListContainer.appendChild(el);
+  });
+}
+
+// Chat search filter
+chatSearchInput.addEventListener("input", () => {
+  const q = chatSearchInput.value.toLowerCase().trim();
+  renderChatList(q ? allChats.filter(c => (c.name || '').toLowerCase().includes(q)) : allChats);
+});
+
+// ─────────────────────────────────
+//  OPEN CHAT
+// ─────────────────────────────────
 async function openChat(chat) {
   currentChatId = chat.id;
-  document.getElementById("active-chat-name").textContent = chat.name;
-  document.getElementById("active-chat-avatar").textContent = chat.name.charAt(0).toUpperCase();
-  
+
+  document.getElementById("active-chat-name").textContent = chat.name || 'Chat';
+  document.getElementById("active-chat-avatar").textContent = (chat.name || "C").charAt(0).toUpperCase();
+
+  const statusEl = document.getElementById("active-chat-status");
+  if (chat.type_name === 'global') {
+    statusEl.textContent = `${onlineUsers.size} en línea`;
+  } else {
+    statusEl.textContent = chat.type_name === 'group' ? 'Grupo' : 'Chat privado';
+  }
+
   noChatScreen.classList.add("hidden");
   activeChatScreen.classList.remove("hidden");
-  
-  messagesContainer.innerHTML = '<div style="color:white;text-align:center;padding:20px;">Cargando mensajes...</div>';
-  
+
+  messagesContainer.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.4);">Cargando mensajes...</div>';
+
   try {
     const res = await fetchSimpleAuth(`/chats/${chat.id}/messages`);
     const messages = await res.json();
-    
     messagesContainer.innerHTML = '';
-    
+
     if (messages.length === 0) {
-      messagesContainer.innerHTML = '<div class="empty-chats" style="color:rgba(255,255,255,0.7);">Se el primero en decir hola.</div>';
+      messagesContainer.innerHTML = '<div class="empty-chats" style="color:rgba(255,255,255,0.4);">¡Sé el primero en escribir! 👋</div>';
     } else {
       messages.forEach(msg => appendMessage(msg));
       scrollToBottom();
     }
   } catch (err) {
-    console.error(err);
-    messagesContainer.innerHTML = '<div style="color:red;text-align:center;">Error cargando mensajes.</div>';
+    messagesContainer.innerHTML = '<div style="color:#ff6b6b;text-align:center;padding:20px;">Error cargando mensajes.</div>';
   }
 }
 
-// Renderizar un mensaje en la UI
+// ─────────────────────────────────
+//  RENDER MESSAGE
+// ─────────────────────────────────
 function appendMessage(msg) {
-  const isMine = msg.senderId === currentUser.id || msg.sender_id === currentUser.id;
+  const senderId = msg.senderId ?? msg.sender_id;
+  const isMine   = senderId === currentUser.id;
+
+  // Remove empty placeholder
+  messagesContainer.querySelector(".empty-chats")?.remove();
+
   const el = document.createElement("div");
   el.className = `message ${isMine ? 'msg-sent' : 'msg-received'}`;
-  
+  el.dataset.messageId = msg.id;
+
   let timeStr = "";
-  if (msg.created_at || msg.createdAt) {
-    const d = new Date(msg.created_at || msg.createdAt);
-    timeStr = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  const ts = msg.created_at || msg.createdAt;
+  if (ts) {
+    const d = new Date(ts);
+    timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
 
-  const emptyDiv = messagesContainer.querySelector(".empty-chats");
-  if(emptyDiv) emptyDiv.remove();
-
-  if (msg.isDeletedGlobal) {
+  if (msg.deleted_by || msg.isDeletedGlobal) {
     el.innerHTML = `<div class="msg-deleted"><i class="fas fa-ban"></i> Mensaje eliminado</div>`;
   } else {
-    let contentHtml = msg.content || "";
-    
-    if (msg.type === "image" && msg.file_url) {
-      // El backend va a hostear publicamente las imagenes subidas a localhost:3000/uploads
-      const url = msg.file_url.startsWith('http') ? msg.file_url : `http://localhost:3000${msg.file_url}`;
-      contentHtml = `<img src="${url}" alt="imagen" style="max-width:200px; border-radius:8px;"><br>` + contentHtml;
+    const senderDisplay = !isMine
+      ? `<span class="msg-sender">${msg.sender_name || 'Usuario'}</span>`
+      : '';
+
+    // Fix: check both camelCase (from WS) and snake_case (from DB)
+    const fileUrl = msg.fileUrl || msg.file_url;
+    const msgType = msg.type || 'text';
+
+    let contentHtml;
+    if (msgType === 'image' && fileUrl) {
+      const imgUrl = fileUrl.startsWith('http') ? fileUrl : `${BASE_URL}${fileUrl}`;
+      contentHtml = `<img src="${imgUrl}" class="msg-image" alt="imagen" onclick="viewImage('${imgUrl}')">`;
+    } else {
+      contentHtml = `<span>${msg.content || ''}</span>`;
     }
 
-    let statusIcon = "";
-    if (isMine) statusIcon = '<i class="fas fa-check status-sent"></i>';
-
-    const senderName = (!isMine && msg.sender_name) ? `<strong style="font-size:12px;color:var(--accent-color);display:block;margin-bottom:4px;">${msg.sender_name}</strong>` : '';
+    const statusIcon = isMine ? '<i class="fas fa-check-double" style="color:var(--accent-color);font-size:10px;margin-left:4px;"></i>' : '';
 
     el.innerHTML = `
-      ${senderName}
-      <div class="msg-content">${contentHtml}</div>
-      <div class="msg-time">${timeStr} <span class="msg-status">${statusIcon}</span></div>
+      ${senderDisplay}
+      <div class="msg-bubble">
+        <div class="msg-content">${contentHtml}</div>
+        <div class="msg-time">${timeStr}${statusIcon}</div>
+      </div>
     `;
   }
-  
+
+  el.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    showContextMenu(e, msg.id, isMine);
+  });
+
   messagesContainer.appendChild(el);
+}
+
+function viewImage(url) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out';
+  overlay.innerHTML = `<img src="${url}" style="max-width:90vw;max-height:90vh;border-radius:10px;box-shadow:0 0 40px rgba(0,0,0,0.8)">`;
+  overlay.addEventListener('click', () => overlay.remove());
+  document.body.appendChild(overlay);
 }
 
 function scrollToBottom() {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-// Enviar Mensaje (Texto Normal)
-sendMsgBtn.addEventListener("click", sendMessage);
-messageInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") sendMessage();
+// ─────────────────────────────────
+//  CONTEXT MENU (right-click on msg)
+// ─────────────────────────────────
+function closeContextMenu() {
+  if (activeContextMenu) { activeContextMenu.remove(); activeContextMenu = null; }
+}
+
+function showContextMenu(e, messageId, isMine) {
+  closeContextMenu();
+
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.style.top  = `${Math.min(e.clientY, window.innerHeight - 120)}px`;
+  menu.style.left = `${Math.min(e.clientX, window.innerWidth - 200)}px`;
+
+  menu.innerHTML = isMine ? `
+    <div class="ctx-item" onclick="deleteMsg(${messageId},false)"><i class="fas fa-trash-alt"></i> Eliminar para mí</div>
+    <div class="ctx-item ctx-danger" onclick="deleteMsg(${messageId},true)"><i class="fas fa-ban"></i> Eliminar para todos</div>
+  ` : `
+    <div class="ctx-item" onclick="deleteMsg(${messageId},false)"><i class="fas fa-trash-alt"></i> Eliminar para mí</div>
+  `;
+
+  document.body.appendChild(menu);
+  activeContextMenu = menu;
+
+  setTimeout(() => document.addEventListener('click', closeContextMenu, { once: true }), 50);
+}
+
+async function deleteMsg(messageId, forEveryone) {
+  closeContextMenu();
+  try {
+    const res = await fetchSimpleAuth(`/messages/${messageId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deleteForEveryone: forEveryone })
+    });
+    if (res.ok) {
+      const el = messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+      if (el) {
+        if (forEveryone) {
+          el.innerHTML = '<div class="msg-deleted"><i class="fas fa-ban"></i> Mensaje eliminado</div>';
+        } else {
+          el.remove();
+        }
+      }
+    }
+  } catch (err) { console.error("Error al eliminar:", err); }
+}
+
+// ─────────────────────────────────
+//  THREE DOTS MENU
+// ─────────────────────────────────
+document.getElementById("chat-options-btn").addEventListener("click", e => {
+  e.stopPropagation();
+  closeContextMenu();
+
+  const btn  = e.currentTarget;
+  const rect = btn.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.style.top   = `${rect.bottom + 6}px`;
+  menu.style.right = `${window.innerWidth - rect.right}px`;
+  menu.style.left  = 'auto';
+
+  menu.innerHTML = `
+    <div class="ctx-item" onclick="clearView()"><i class="fas fa-eraser"></i> Limpiar vista</div>
+    <div class="ctx-item" onclick="scrollToBottom()"><i class="fas fa-arrow-down"></i> Ir al final</div>
+  `;
+
+  document.body.appendChild(menu);
+  activeContextMenu = menu;
+  setTimeout(() => document.addEventListener('click', closeContextMenu, { once: true }), 50);
 });
+
+function clearView() {
+  closeContextMenu();
+  messagesContainer.innerHTML = '<div class="empty-chats" style="color:rgba(255,255,255,0.4);">Vista limpiada (mensajes siguen en el servidor).</div>';
+}
+
+// ─────────────────────────────────
+//  SEND MESSAGE
+// ─────────────────────────────────
+sendMsgBtn.addEventListener("click", sendMessage);
+messageInput.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) sendMessage(); });
 
 function sendMessage() {
   const content = messageInput.value.trim();
-  if (!content || !currentChatId) return;
+  if (!content || !currentChatId || socket?.readyState !== WebSocket.OPEN) return;
   messageInput.value = '';
-  
-  socket.send(JSON.stringify({
-    type: "send_message",
-    chatId: currentChatId,
-    content: content,
-    msgType: "text"
-  }));
+  socket.send(JSON.stringify({ type: "send_message", chatId: currentChatId, content, msgType: "text" }));
 }
 
-// Subir Archivo
+// ─────────────────────────────────
+//  FILE UPLOAD
+// ─────────────────────────────────
 attachBtn.addEventListener("click", () => fileInput.click());
 
-fileInput.addEventListener("change", async (e) => {
+fileInput.addEventListener("change", async e => {
   const file = e.target.files[0];
+  fileInput.value = '';
   if (!file || !currentChatId) return;
 
-  const formData = new FormData();
-  formData.append("file", file);
+  // Show upload indicator
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'message msg-sent';
+  loadingEl.innerHTML = '<div class="msg-bubble" style="opacity:0.6">Subiendo... <i class="fas fa-spinner fa-spin"></i></div>';
+  messagesContainer.appendChild(loadingEl);
+  scrollToBottom();
 
   try {
-    const response = await fetch(`${API_URL}/messages/upload`, {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${API_URL}/messages/upload`, {
       method: "POST",
       headers: { "user-id": currentUser.id },
       body: formData
     });
-    
-    const data = await response.json();
-    if (response.ok && data.fileUrl) {
-      // Notificamos via websocket usando la URL devuelta por nuestro server
+    loadingEl.remove();
+
+    const data = await res.json();
+    if (res.ok && data.fileUrl) {
       socket.send(JSON.stringify({
         type: "send_message",
         chatId: currentChatId,
@@ -275,23 +396,37 @@ fileInput.addEventListener("change", async (e) => {
         fileUrl: data.fileUrl
       }));
     }
-  } catch (error) {
-    console.error("Error subiendo archivo:", error);
-    alert("Hubo un error subiendo la imagen.");
+  } catch (err) {
+    loadingEl.remove();
+    console.error("Error subiendo archivo:", err);
   }
 });
 
-// --- NEW CHAT MODAL LOGIC (Privado y Grupal) ---
-const newChatBtn = document.getElementById("new-chat-btn");
-const modal = document.getElementById("new-chat-modal");
-const cancelModal = document.getElementById("cancel-new-chat");
-const confirmModal = document.getElementById("confirm-new-chat");
-const searchInput = document.getElementById("new-chat-username");
-const searchResults = document.getElementById("user-search-results");
+// ─────────────────────────────────
+//  ONLINE USERS
+// ─────────────────────────────────
+function updateOnlineStatus() {
+  const statusEl = document.getElementById("active-chat-status");
+  if (!statusEl || !currentChatId) return;
+  const chat = allChats.find(c => c.id === currentChatId);
+  if (chat?.type_name === 'global') {
+    statusEl.textContent = `${onlineUsers.size} en línea`;
+  }
+}
+
+// ─────────────────────────────────
+//  NEW CHAT MODAL
+// ─────────────────────────────────
+const newChatBtn            = document.getElementById("new-chat-btn");
+const modal                 = document.getElementById("new-chat-modal");
+const cancelModal           = document.getElementById("cancel-new-chat");
+const confirmModal          = document.getElementById("confirm-new-chat");
+const searchInput           = document.getElementById("new-chat-username");
+const searchResults         = document.getElementById("user-search-results");
 const selectedParticipantsEl = document.getElementById("selected-participants");
 
-let chatMode = 'private'; // 'private' o 'group'
-let selectedUsers = []; // Array de { id, username } para grupos
+let chatMode = 'private';
+let selectedUsers = [];
 let searchDebounce;
 
 function switchChatMode(mode) {
@@ -305,8 +440,8 @@ function switchChatMode(mode) {
     : "Escribe el nombre de usuario para buscarlo.";
   selectedUsers = [];
   renderSelectedChips();
-  searchResults.classList.add("hidden");
   searchResults.innerHTML = '';
+  searchResults.classList.add("hidden");
   searchInput.value = '';
 }
 
@@ -314,7 +449,7 @@ function renderSelectedChips() {
   selectedParticipantsEl.innerHTML = selectedUsers.map(u => `
     <div class="participant-chip">
       ${u.username}
-      <button onclick="removeParticipant(${u.id})" title="Eliminar">✕</button>
+      <button onclick="removeParticipant(${u.id})">✕</button>
     </div>
   `).join('');
 }
@@ -324,68 +459,41 @@ function removeParticipant(userId) {
   renderSelectedChips();
 }
 
-newChatBtn.addEventListener("click", () => {
-  modal.classList.remove("hidden");
-  switchChatMode('private'); // reset al abrir
-});
+newChatBtn.addEventListener("click", () => { modal.classList.remove("hidden"); switchChatMode('private'); });
+cancelModal.addEventListener("click", () => { modal.classList.add("hidden"); selectedUsers = []; searchInput.value = ''; });
 
-cancelModal.addEventListener("click", () => {
-  modal.classList.add("hidden");
-  searchInput.value = "";
-  selectedUsers = [];
-});
-
-// Búsqueda con debounce (espera 400ms tras dejar de escribir)
 searchInput.addEventListener("input", () => {
   clearTimeout(searchDebounce);
   const q = searchInput.value.trim();
-
-  if (!q) {
-    searchResults.classList.add("hidden");
-    searchResults.innerHTML = '';
-    return;
-  }
+  if (!q) { searchResults.classList.add("hidden"); searchResults.innerHTML = ''; return; }
 
   searchDebounce = setTimeout(async () => {
     try {
       const res = await fetchSimpleAuth(`/users/search?q=${encodeURIComponent(q)}`);
       const users = await res.json();
+      const filtered = users.filter(u => u.id !== currentUser.id && !selectedUsers.find(s => s.id === u.id));
 
-      // Filtrar al propio usuario y los ya seleccionados
-      const filtered = users.filter(u =>
-        u.id !== currentUser.id && !selectedUsers.find(s => s.id === u.id)
-      );
-
-      if (filtered.length === 0) {
-        searchResults.innerHTML = '<div style="padding:12px;color:var(--text-secondary);font-size:14px;">Sin resultados</div>';
-      } else {
-        searchResults.innerHTML = filtered.map(u => `
-          <div class="user-result-item" onclick="selectUser(${u.id}, '${u.username}')">
-            <div class="avatar">${u.username.charAt(0).toUpperCase()}</div>
-            <span>${u.username}</span>
-          </div>
-        `).join('');
-      }
+      searchResults.innerHTML = filtered.length === 0
+        ? '<div style="padding:12px;color:var(--text-secondary);font-size:14px;">Sin resultados</div>'
+        : filtered.map(u => `
+            <div class="user-result-item" onclick="selectUser(${u.id}, '${u.username}')">
+              <div class="avatar">${u.username.charAt(0).toUpperCase()}</div>
+              <span>${u.username}</span>
+              ${onlineUsers.has(u.id) ? '<span class="online-dot-small"></span>' : ''}
+            </div>`).join('');
 
       searchResults.classList.remove("hidden");
-    } catch (err) {
-      console.error("Error en búsqueda:", err);
-    }
-  }, 400);
+    } catch (err) { console.error(err); }
+  }, 350);
 });
 
 function selectUser(userId, username) {
   if (chatMode === 'private') {
-    // En privado: selección directa y creamos el chat
     searchInput.value = username;
     searchResults.classList.add("hidden");
     selectedUsers = [{ id: userId, username }];
   } else {
-    // En grupo: agrega el usuario al conjunto y limpia el input
-    if (!selectedUsers.find(u => u.id === userId)) {
-      selectedUsers.push({ id: userId, username });
-      renderSelectedChips();
-    }
+    if (!selectedUsers.find(u => u.id === userId)) { selectedUsers.push({ id: userId, username }); renderSelectedChips(); }
     searchInput.value = '';
     searchResults.classList.add("hidden");
   }
@@ -393,52 +501,19 @@ function selectUser(userId, username) {
 
 confirmModal.addEventListener("click", async () => {
   if (chatMode === 'private') {
-    if (selectedUsers.length === 0) return alert("Elige un usuario para chatear.");
-
-    const targetUser = selectedUsers[0];
+    if (!selectedUsers.length) return alert("Selecciona un usuario.");
     try {
-      const res = await fetchSimpleAuth(`/chats`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ typeName: 'private', participants: [targetUser.id] })
-      });
+      const res = await fetchSimpleAuth('/chats', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ typeName: 'private', participants: [selectedUsers[0].id] }) });
       const data = await res.json();
-      if (res.ok) {
-        modal.classList.add("hidden");
-        loadChats();
-      } else {
-        alert("Error: " + data.message);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-
+      if (res.ok) { modal.classList.add("hidden"); loadChats(); } else { alert(data.message); }
+    } catch (err) { console.error(err); }
   } else {
-    // Grupal
-    if (selectedUsers.length < 1) return alert("Agrega al menos un participante al grupo.");
+    if (!selectedUsers.length) return alert("Agrega al menos un participante.");
     const groupName = document.getElementById("group-name-input").value.trim() || `Grupo de ${currentUser.username}`;
-
     try {
-      const res = await fetchSimpleAuth(`/chats`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          typeName: 'group',
-          name: groupName,
-          participants: selectedUsers.map(u => u.id)
-        })
-      });
+      const res = await fetchSimpleAuth('/chats', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ typeName: 'group', name: groupName, participants: selectedUsers.map(u => u.id) }) });
       const data = await res.json();
-      if (res.ok) {
-        modal.classList.add("hidden");
-        selectedUsers = [];
-        loadChats();
-      } else {
-        alert("Error: " + data.message);
-      }
-    } catch (err) {
-      console.error(err);
-    }
+      if (res.ok) { modal.classList.add("hidden"); selectedUsers = []; loadChats(); } else { alert(data.message); }
+    } catch (err) { console.error(err); }
   }
 });
-
