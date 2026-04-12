@@ -40,11 +40,20 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 4px;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .app-bg {
@@ -248,6 +257,13 @@ body {
   flex-direction: column;
   background-color: var(--bg-app);
   position: relative;
+  overflow: hidden; /* Importante para que el hijo (messages-container) use scroll */
+}
+
+.chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .no-chat-selected {
