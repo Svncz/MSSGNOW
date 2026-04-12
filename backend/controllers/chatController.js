@@ -135,15 +135,12 @@ async function getChatMessages(req, res) {
       return res.status(403).json({ message: "No tienes acceso a este chat" });
     }
 
-    // Obtener los mensajes, ignorando los que el usuario haya "eliminado para sí mismo"
-    // Además verificamos si fue borrado para todos (deleted_by IS NOT NULL)
+    // Obtener mensajes - LEFT JOIN para no fallar si falta algún registro en message_status
     const [messages] = await db.query(
-      `SELECT m.id, m.chat_id, m.sender_id, m.content, m.type, m.file_url, m.reply_to_id, 
-              m.created_at, m.deleted_at, m.deleted_by, u.username as sender_name,
-              ms.sent_at, ms.failed_at
+      `SELECT m.id, m.chat_id, m.sender_id, m.content, m.type, m.file_url, m.reply_to_id,
+              m.created_at, m.deleted_at, m.deleted_by, u.username as sender_name
        FROM messages m
        JOIN users u ON m.sender_id = u.id
-       JOIN message_status ms ON m.id = ms.message_id
        LEFT JOIN message_deletions md ON m.id = md.message_id AND md.user_id = ?
        WHERE m.chat_id = ? AND md.id IS NULL
        ORDER BY m.created_at ASC`,

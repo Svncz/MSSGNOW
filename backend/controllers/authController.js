@@ -78,6 +78,12 @@ async function login(req, res) {
 
     await db.query("UPDATE users SET last_seen = NOW() WHERE id = ?", [user.id]);
 
+    // Asegurar que el usuario está siempre en el Chat Global (idempotente)
+    await db.query(
+      "INSERT IGNORE INTO chat_participants (chat_id, user_id, is_admin) VALUES (1, ?, 0)",
+      [user.id]
+    );
+
     // Retorna usuario sin la contraseña
     res.status(200).json({
       message: "Login exitoso",

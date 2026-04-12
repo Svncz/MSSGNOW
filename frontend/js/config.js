@@ -1,10 +1,8 @@
-// =====================================================
-//  MSSGNOW - Configuración de Conexión al Servidor
-// =====================================================
-//
-// ⚠️  CAMBIA ESTAS URLs ANTES DE DESPLEGAR:
-//     Reemplaza con la IP pública de tu servidor Ubuntu
-//     Ejemplo: "http://123.456.789.0:3000"
+// =============================================
+//  MSSGNOW - Config de Conexión
+// =============================================
+//  El servidor Node.js sirve el frontend en el mismo puerto.
+//  Abre http://localhost:3000 en el navegador de Ubuntu.
 //
 const CONFIG = {
   API_URL: "http://localhost:3000/api",

@@ -117,7 +117,7 @@ async function loadChats() {
     chatListContainer.innerHTML = '';
     
     if (chats.length === 0) {
-      chatListContainer.innerHTML = '<div class="empty-chats">Cargando Chat Global...</div>';
+      chatListContainer.innerHTML = '<div class="empty-chats">No se encontraron chats.<br>Recarga la página o inicia sesión de nuevo.</div>';
       return;
     }
 

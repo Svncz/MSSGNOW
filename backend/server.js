@@ -26,8 +26,12 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// Archivos estáticos
+// Archivos estáticos del backend (uploads)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// ✅ Servir el Frontend desde el mismo servidor
+// Accede en: http://localhost:3000 (desde Ubuntu) o http://IP_VM:3000 (desde Windows si hay red)
+app.use(express.static(path.join(__dirname, "../frontend")));
 
 // Rutas de la API
 app.use("/api/auth", authRoutes);
@@ -41,17 +45,39 @@ initSocket(server);
 // Inicializar DB básica y arrancar
 async function startServer() {
   try {
-    // Asegurar que el chat global (ID 1) existe en los tipos
-    await db.query("INSERT IGNORE INTO chat_types (id, name) VALUES (3, 'global')");
-    // Crear el chat global en sí
-    await db.query("INSERT IGNORE INTO chats (id, type_id, name, created_by) VALUES (1, 3, 'Chat Global (Público)', NULL)");
-    
+    // Verificar conexión a la DB
+    await db.query("SELECT 1");
+    console.log("✅ Conectado a MySQL correctamente");
+
+    // Asegurar que el tipo 'global' existe (por nombre, no por ID fijo)
+    await db.query("INSERT IGNORE INTO chat_types (name) VALUES ('private'), ('group'), ('global')");
+
+    // Buscar el type_id de 'global'
+    const [types] = await db.query("SELECT id FROM chat_types WHERE name = 'global'");
+    if (types.length > 0) {
+      const globalTypeId = types[0].id;
+      // Crear el Chat Global si no existe (usa el type_id real)
+      await db.query(
+        "INSERT IGNORE INTO chats (id, type_id, name, created_by) VALUES (1, ?, 'Chat Global 🌎', NULL)",
+        [globalTypeId]
+      );
+
+      // Agregar TODOS los usuarios existentes al Chat Global (por si se registraron antes)
+      await db.query(
+        "INSERT IGNORE INTO chat_participants (chat_id, user_id, is_admin) SELECT 1, id, 0 FROM users"
+      );
+
+      console.log("✅ Chat Global verificado (ID=1)");
+    }
+
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, () => {
-      console.log(`🚀 Servidor Simplificado corriendo en http://localhost:${PORT}`);
+      console.log(`🚀 MSSGNOW corriendo en http://localhost:${PORT}`);
     });
   } catch (err) {
-    console.error("Error iniciando servidor:", err);
+    console.error("❌ Error iniciando servidor:", err.message);
+    console.error("→ Verifica que MySQL está corriendo y que el .env tiene los datos correctos");
+    process.exit(1);
   }
 }
 
