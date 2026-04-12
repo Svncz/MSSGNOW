@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MSSGNOW - Conectando tu mundo</title>
+  
+  <!-- Fonts: Inter for a modern look -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="./css/auth.css">
+</head>
+<body>
+
+  <div class="background-mesh"></div>
+
+  <main class="auth-container">
+    <div class="auth-box">
+      <div class="logo-section">
+        <div class="logo-icon"></div>
+        <h1>MSSGNOW</h1>
+        <p class="subtitle">Comunicación al instante.</p>
+      </div>
+
+      <!-- Formularios -->
+      <div class="form-wrapper">
+        
+        <!-- LOGIN FORM -->
+        <form id="login-form" class="auth-form active">
+          <h2>Iniciar Sesión</h2>
+          
+          <div class="input-group">
+            <label for="login-email">Usuario o Correo</label>
+            <input type="text" id="login-email" placeholder="Ingresa tu usuario o correo" required>
+          </div>
+          
+          <div class="input-group">
+            <label for="login-password">Contraseña</label>
+            <input type="password" id="login-password" placeholder="Tu contraseña" required>
+          </div>
+
+          <button type="submit" class="btn primary-btn">Ingresar</button>
+          
+          <p class="switch-form-text">
+            ¿No tienes cuenta? <span class="accent-link" onclick="toggleForm('register')">Regístrate</span>
+          </p>
+        </form>
+
+        <!-- REGISTER FORM -->
+        <form id="register-form" class="auth-form">
+          <h2>Crear Cuenta</h2>
+          
+          <div class="input-group">
+            <label for="reg-username">Nombre de Usuario</label>
+            <input type="text" id="reg-username" placeholder="Elige un usuario único" required>
+          </div>
+
+          <div class="input-group">
+            <label for="reg-email">Correo Electrónico</label>
+            <input type="email" id="reg-email" placeholder="tu@correo.com" required>
+          </div>
+          
+          <div class="input-group">
+            <label for="reg-password">Contraseña</label>
+            <input type="password" id="reg-password" placeholder="Mínimo 8 caracteres" required>
+          </div>
+
+          <button type="submit" class="btn primary-btn">Registrar y Entrar</button>
+          
+          <p class="switch-form-text">
+            ¿Ya tienes cuenta? <span class="accent-link" onclick="toggleForm('login')">Inicia sesión</span>
+          </p>
+        </form>
+
+      </div>
+    </div>
+  </main>
+
+  <script src="./js/config.js"></script>
+  <script src="./js/auth.js"></script>
+</body>
+</html>

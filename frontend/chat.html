@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MSSGNOW - Web</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Iconos (Lucide o FontAwesome via CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link rel="stylesheet" href="./css/chat.css">
+</head>
+<body>
+
+  <!-- Background accent -->
+  <div class="app-bg"></div>
+
+  <div class="app-container">
+    
+    <!-- BARRA LATERAL (LISTA DE CHATS) -->
+    <aside class="sidebar">
+      
+      <!-- Mi Perfil / Acciones -->
+      <header class="sidebar-header">
+        <div class="my-profile">
+          <div class="avatar" id="my-avatar"></div>
+          <span id="my-username" class="username-display">Cargando...</span>
+        </div>
+        <div class="sidebar-actions">
+          <button class="icon-btn" id="new-chat-btn" title="Nuevo Chat"><i class="fas fa-plus"></i></button>
+          <button class="icon-btn" id="logout-btn" title="Cerrar Sesión"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
+      </header>
+
+      <!-- Buscador -->
+      <div class="search-container">
+        <div class="search-box">
+          <i class="fas fa-search search-icon"></i>
+          <input type="text" id="chat-search" placeholder="Buscar o iniciar un nuevo chat">
+        </div>
+      </div>
+
+      <!-- Lista de Chats -->
+      <div class="chat-list" id="chat-list-container">
+        <!-- Generado dinámicamente -->
+        <div class="empty-chats">Cargando chats...</div>
+      </div>
+      
+    </aside>
+
+    <!-- ÁREA PRINCIPAL (CHAT ACTIVO) -->
+    <main class="chat-area">
+      
+      <!-- Estado cuando no hay chat seleccionado -->
+      <div class="no-chat-selected" id="no-chat-screen">
+        <div class="welcome-img">
+          <i class="fas fa-comments"></i>
+        </div>
+        <h2>MSSGNOW Web</h2>
+        <p>Selecciona un chat para comenzar a enviar mensajes</p>
+      </div>
+
+      <!-- Pantalla del chat activo (oculto por defecto) -->
+      <div class="active-chat-screen hidden" id="active-chat-screen">
+        
+        <!-- Cabecera del Chat -->
+        <header class="chat-header">
+          <div class="chat-info">
+            <div class="avatar" id="active-chat-avatar"></div>
+            <div class="chat-meta">
+              <h3 id="active-chat-name">Nombre de Contacto</h3>
+              <span class="status" id="active-chat-status">últ. vez hoy a las 10:30</span>
+            </div>
+          </div>
+          <div class="chat-actions">
+            <button class="icon-btn"><i class="fas fa-search"></i></button>
+            <button class="icon-btn"><i class="fas fa-ellipsis-v"></i></button>
+          </div>
+        </header>
+
+        <!-- Contenedor de Mensajes -->
+        <div class="messages-container" id="messages-container">
+          <!-- Mensajes dinámicos -->
+        </div>
+
+        <!-- Barra de Escritura -->
+        <footer class="chat-footer">
+          <input type="file" id="file-input" class="hidden" accept="image/*, audio/*">
+          <button class="icon-btn" id="attach-btn" title="Adjuntar Archivo"><i class="fas fa-paperclip"></i></button>
+          
+          <div class="input-container">
+            <input type="text" id="message-input" placeholder="Escribe un mensaje..." autocomplete="off">
+          </div>
+          <button class="icon-btn send-btn" id="send-msg-btn">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </footer>
+
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Modal Nuevo Chat -->
+  <div class="modal hidden" id="new-chat-modal">
+    <div class="modal-content">
+      <h3>Nuevo Chat</h3>
+      
+      <!-- Tabs: Privado / Grupal -->
+      <div class="modal-tabs">
+        <button class="modal-tab active" id="tab-private" onclick="switchChatMode('private')">
+          <i class="fas fa-user"></i> Privado
+        </button>
+        <button class="modal-tab" id="tab-group" onclick="switchChatMode('group')">
+          <i class="fas fa-users"></i> Grupo
+        </button>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- Nombre del grupo (solo visible en modo grupo) -->
+        <div id="group-name-field" class="hidden">
+          <input type="text" id="group-name-input" placeholder="Nombre del grupo (ej: Equipo Alpha)">
+        </div>
+
+        <!-- Buscador de usuarios -->
+        <input type="text" id="new-chat-username" placeholder="Busca un usuario por su nombre..." autocomplete="off">
+        
+        <!-- Lista de resultados de búsqueda -->
+        <div id="user-search-results" class="user-search-results hidden"></div>
+
+        <!-- Participantes seleccionados (visible en grupo) -->
+        <div id="selected-participants" class="selected-participants hidden"></div>
+
+        <small class="hint" id="modal-hint">Escribe el nombre de usuario para buscarlo.</small>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn clear-btn" id="cancel-new-chat">Cancelar</button>
+        <button class="btn primary-btn" id="confirm-new-chat">Iniciar Chat</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./js/config.js"></script>
+  <script src="./js/chat.js"></script>
+</body>
+</html>
