@@ -16,10 +16,10 @@ async function createMessage(data) {
 
     const messageId = result.insertId;
 
-    // Crear registro inicial de estado global del mensaje (sent_at por defecto a NOW)
+    // Actualizar el timestamp del chat para el reordenamiento de la lista
     await conn.query(
-      `INSERT INTO message_status (message_id) VALUES (?)`,
-      [messageId]
+      "UPDATE chats SET last_message_at = NOW() WHERE id = ?",
+      [chatId]
     );
 
     // Opcional: Podríamos aquí registrar explícitamente en message_reads para el remitente (como leído/entregado)

@@ -67,12 +67,36 @@ function initSocket(server) {
           case "delivered":
             if (!ws.userId) return;
             await messageController.markDelivered(data.messageId, ws.userId);
+            
+            // Notificar al remitente original para que vea la palomita doble gris
+            const [deliveredMsg] = await db.query("SELECT sender_id FROM messages WHERE id = ?", [data.messageId]);
+            if (deliveredMsg.length > 0) {
+              const senderWs = clients.get(deliveredMsg[0].sender_id);
+              if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+                senderWs.send(JSON.stringify({ 
+                  type: "message_status_update", 
+                  data: { messageId: data.messageId, status: "delivered" } 
+                }));
+              }
+            }
             break;
 
           // 👁️ MENSAJE LEÍDO
           case "read":
             if (!ws.userId) return;
             await messageController.markRead(data.messageId, ws.userId);
+
+            // Notificar al remitente original para que vea las palomitas azules
+            const [readMsg] = await db.query("SELECT sender_id FROM messages WHERE id = ?", [data.messageId]);
+            if (readMsg.length > 0) {
+              const senderWs = clients.get(readMsg[0].sender_id);
+              if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+                senderWs.send(JSON.stringify({ 
+                  type: "message_status_update", 
+                  data: { messageId: data.messageId, status: "read" } 
+                }));
+              }
+            }
             break;
             
           default:

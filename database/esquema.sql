@@ -34,6 +34,7 @@ CREATE TABLE chats (
   avatar_url VARCHAR(500),
   created_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (type_id) REFERENCES chat_types(id),
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );

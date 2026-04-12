@@ -68,6 +68,10 @@ function initWebSocket() {
         updateOnlineStatus();
         break;
 
+      case "message_status_update":
+        updateMessageStatusUI(msg.data);
+        break;
+
       case "error":
         console.error("WS error:", msg.message);
         break;
@@ -89,7 +93,16 @@ function handleIncomingMessage(data) {
       socket.send(JSON.stringify({ type: "delivered", messageId: data.id }));
     }
   }
-  loadChats(); // refresh list silently
+  
+  // Reordenar chat en la lista local
+  const chatIdx = allChats.findIndex(c => c.id === data.chatId);
+  if (chatIdx > -1) {
+    const chat = allChats.splice(chatIdx, 1)[0];
+    allChats.unshift(chat); // Mover al principio
+    renderChatList(allChats);
+  } else {
+    loadChats(); // Si no existe en la lista local, recargar de la API
+  }
 }
 
 // ─────────────────────────────────
@@ -236,13 +249,13 @@ function appendMessage(msg) {
       contentHtml = `<span>${msg.content || ''}</span>`;
     }
 
-    const statusIcon = isMine ? '<i class="fas fa-check-double" style="color:var(--accent-color);font-size:10px;margin-left:4px;"></i>' : '';
+    const statusHtml = getStatusIconHtml(msg.status || 'sent');
 
     el.innerHTML = `
       ${senderDisplay}
       <div class="msg-bubble">
         <div class="msg-content">${contentHtml}</div>
-        <div class="msg-time">${timeStr}${statusIcon}</div>
+        <div class="msg-time">${timeStr}${isMine ? statusHtml : ''}</div>
       </div>
     `;
   }
@@ -253,6 +266,31 @@ function appendMessage(msg) {
   });
 
   messagesContainer.appendChild(el);
+function getStatusIconHtml(status) {
+  switch (status) {
+    case 'read':
+      return '<i class="fas fa-check-double status-tick read" style="color:#53bdeb;font-size:10px;margin-left:4px;"></i>';
+    case 'delivered':
+      return '<i class="fas fa-check-double status-tick" style="color:var(--text-secondary);font-size:10px;margin-left:4px;"></i>';
+    case 'sent':
+    default:
+      return '<i class="fas fa-check status-tick" style="color:var(--text-secondary);font-size:10px;margin-left:4px;"></i>';
+  }
+}
+
+function updateMessageStatusUI(data) {
+  const { messageId, status } = data;
+  const msgEl = messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+  if (!msgEl) return;
+
+  const tickContainer = msgEl.querySelector(".msg-time");
+  if (!tickContainer) return;
+
+  // Reemplazar el icono existente
+  const oldTick = tickContainer.querySelector(".status-tick");
+  if (oldTick) oldTick.remove();
+  
+  tickContainer.insertAdjacentHTML('beforeend', getStatusIconHtml(status));
 }
 
 function viewImage(url) {

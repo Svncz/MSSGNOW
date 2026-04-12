@@ -7,12 +7,12 @@ async function getUserChats(req, res) {
 
     // Obtiene los chats donde el usuario es participante
     const [chats] = await db.query(
-      `SELECT c.id, c.type_id, c.name, c.avatar_url, c.created_at, ct.name as type_name
+      `SELECT c.id, c.type_id, c.name, c.avatar_url, c.created_at, c.last_message_at, ct.name as type_name
        FROM chats c
        JOIN chat_participants cp ON c.id = cp.chat_id
        JOIN chat_types ct ON c.type_id = ct.id
        WHERE cp.user_id = ?
-       ORDER BY c.created_at DESC`,
+       ORDER BY c.last_message_at DESC`,
       [userId]
     );
 
@@ -138,7 +138,15 @@ async function getChatMessages(req, res) {
     // Obtener mensajes - LEFT JOIN para no fallar si falta algún registro en message_status
     const [messages] = await db.query(
       `SELECT m.id, m.chat_id, m.sender_id, m.content, m.type, m.file_url, m.reply_to_id,
-              m.created_at, m.deleted_at, m.deleted_by, u.username as sender_name
+              m.created_at, m.deleted_at, m.deleted_by, u.username as sender_name,
+              (SELECT CASE 
+                        WHEN COUNT(mr.read_at) > 0 THEN 'read'
+                        WHEN COUNT(mr.delivered_at) > 0 THEN 'delivered'
+                        ELSE 'sent'
+                      END
+               FROM message_reads mr
+               WHERE mr.message_id = m.id AND mr.user_id != m.sender_id
+              ) as status
        FROM messages m
        JOIN users u ON m.sender_id = u.id
        LEFT JOIN message_deletions md ON m.id = md.message_id AND md.user_id = ?
