@@ -1,14 +1,14 @@
 :root {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --accent-primary: #3b82f6;
-  --accent-hover: #2563eb;
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --gradient-1: #3b82f6;
-  --gradient-2: #8b5cf6;
-  --glass-bg: rgba(30, 41, 59, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --bg-primary: #0b141a;
+  --bg-secondary: #111b21;
+  --accent-primary: #00a884;
+  --accent-hover: #008f6f;
+  --text-primary: #e9edef;
+  --text-secondary: #8696a0;
+  --gradient-1: #00a884;
+  --gradient-2: #05cd99;
+  --glass-bg: rgba(17, 27, 33, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.05);
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -40,9 +40,9 @@ body {
   height: 100%;
   z-index: 0;
   background-image: 
-    radial-gradient(at 10% 20%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
-    radial-gradient(at 90% 80%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
-    radial-gradient(at 50% 50%, rgba(15, 23, 42, 1) 0px, transparent 100%);
+    radial-gradient(at 10% 20%, rgba(0, 168, 132, 0.15) 0px, transparent 50%),
+    radial-gradient(at 90% 80%, rgba(5, 205, 153, 0.15) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(11, 20, 26, 1) 0px, transparent 100%);
 }
 
 .auth-container {
