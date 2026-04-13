@@ -143,6 +143,7 @@ function renderChatList(chats) {
     const el = document.createElement("div");
     el.className = "chat-item" + (chat.id === currentChatId ? " active" : "");
     const initial = (chat.name || "?").charAt(0).toUpperCase();
+    const isGlobal = chat.type_name === 'global';
     const isOnline = chat.type_name === 'private' && onlineUsers.has(chat.other_user_id);
 
     el.innerHTML = `
