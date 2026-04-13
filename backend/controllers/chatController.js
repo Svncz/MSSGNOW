@@ -20,13 +20,16 @@ async function getUserChats(req, res) {
     for (let chat of chats) {
       if (chat.type_name === 'private') {
         const [otherUser] = await db.query(
-          `SELECT u.username, u.profile_pic_url, u.last_seen
+          `SELECT u.id, u.username, u.profile_pic_url, u.last_seen
            FROM chat_participants cp
            JOIN users u ON cp.user_id = u.id
-           WHERE cp.chat_id = ? AND cp.user_id != ?`,
+           WHERE cp.id IN (
+             SELECT id FROM chat_participants WHERE chat_id = ? AND user_id != ?
+           )`,
           [chat.id, userId]
         );
         if (otherUser.length > 0) {
+          chat.other_user_id = otherUser[0].id;
           chat.name = otherUser[0].username; // Reemplazamos nombre genérico por el del usuario
           chat.avatar_url = otherUser[0].profile_pic_url;
           chat.other_user_last_seen = otherUser[0].last_seen;

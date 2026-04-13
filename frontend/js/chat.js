@@ -143,10 +143,13 @@ function renderChatList(chats) {
     const el = document.createElement("div");
     el.className = "chat-item" + (chat.id === currentChatId ? " active" : "");
     const initial = (chat.name || "?").charAt(0).toUpperCase();
-    const isGlobal = chat.type_name === 'global';
+    const isOnline = chat.type_name === 'private' && onlineUsers.has(chat.other_user_id);
 
     el.innerHTML = `
-      <div class="avatar${isGlobal ? ' avatar-global' : ''}">${initial}</div>
+      <div class="avatar${isGlobal ? ' avatar-global' : ''}">
+        ${initial}
+        ${isOnline ? '<span class="online-dot-small"></span>' : ''}
+      </div>
       <div class="chat-item-info">
         <div class="chat-item-top">
           <span class="chat-item-name">${chat.name || 'Chat'}</span>
@@ -454,11 +457,15 @@ fileInput.addEventListener("change", async e => {
 // ─────────────────────────────────
 function updateOnlineStatus() {
   const statusEl = document.getElementById("active-chat-status");
-  if (!statusEl || !currentChatId) return;
-  const chat = allChats.find(c => c.id === currentChatId);
-  if (chat?.type_name === 'global') {
-    statusEl.textContent = `${onlineUsers.size} en línea`;
+  if (statusEl && currentChatId) {
+    const chat = allChats.find(c => c.id === currentChatId);
+    if (chat?.type_name === 'global') {
+      statusEl.textContent = `${onlineUsers.size} en línea`;
+    }
   }
+  
+  // Refresh chat list to show/hide online dots
+  renderChatList(allChats);
 }
 
 // ─────────────────────────────────
