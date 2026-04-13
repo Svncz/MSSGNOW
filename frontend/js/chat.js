@@ -147,14 +147,12 @@ function renderChatList(chats) {
     const isOnline = chat.type_name === 'private' && onlineUsers.has(chat.other_user_id);
 
     el.innerHTML = `
-      <div class="avatar${isGlobal ? ' avatar-global' : ''}">
-        ${initial}
-        ${isOnline ? '<span class="online-dot-small"></span>' : ''}
-      </div>
+      <div class="avatar${isGlobal ? ' avatar-global' : ''}">${initial}</div>
       <div class="chat-item-info">
         <div class="chat-item-top">
           <span class="chat-item-name">${chat.name || 'Chat'}</span>
           ${isGlobal ? '<span class="global-badge">🌎</span>' : ''}
+          ${isOnline ? '<span class="online-dot-small"></span>' : ''}
         </div>
         <div class="chat-item-bottom">
           <span class="chat-item-msg">Toca para abrir</span>
