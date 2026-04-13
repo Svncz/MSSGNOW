@@ -38,6 +38,18 @@ function initSocket(server) {
             ws.send(JSON.stringify({ type: "auth_success", userId }));
             console.log(`🔐 Usuario ${userId} autenticado en WebSocket`);
             broadcastOnlineUsers(); // 📡 Notificar a todos
+
+            // 🔄 Sincronizar mensajes pendientes de entrega
+            const pendingDeliveries = await messageController.syncDeliveredStatus(userId);
+            pendingDeliveries.forEach(msg => {
+              const senderWs = clients.get(msg.senderId);
+              if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+                senderWs.send(JSON.stringify({ 
+                  type: "message_status_update", 
+                  data: { messageId: msg.messageId, status: "delivered" } 
+                }));
+              }
+            });
             break;
 
           // 📨 ENVIAR MENSAJE (texto, imagen, audio)

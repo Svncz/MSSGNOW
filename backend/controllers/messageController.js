@@ -121,10 +121,35 @@ async function markRead(messageId, userId) {
   );
 }
 
+// 🔄 SINCRONIZAR ESTADOS AL CONECTAR
+async function syncDeliveredStatus(userId) {
+  // 1. Buscar mensajes en chats del usuario donde él no es el remitente y no están marcados como entregados
+  const [pending] = await db.query(
+    `SELECT m.id as messageId, m.sender_id as senderId
+     FROM messages m
+     JOIN chat_participants cp ON m.chat_id = cp.chat_id
+     LEFT JOIN message_reads mr ON m.id = mr.message_id AND mr.user_id = ?
+     WHERE cp.user_id = ? 
+       AND m.sender_id != ?
+       AND (mr.delivered_at IS NULL)`,
+    [userId, userId, userId]
+  );
+
+  if (pending.length === 0) return [];
+
+  // 2. Marcarlos todos como entregados
+  for (const msg of pending) {
+    await markDelivered(msg.messageId, userId);
+  }
+
+  return pending; // Devolver para notificar vía WS
+}
+
 module.exports = {
   createMessage,
   deleteMessage,
   getChatParticipants,
   markDelivered,
-  markRead
+  markRead,
+  syncDeliveredStatus
 };

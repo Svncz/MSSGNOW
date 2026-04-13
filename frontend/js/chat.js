@@ -201,7 +201,14 @@ async function openChat(chat) {
     if (messages.length === 0) {
       messagesContainer.innerHTML = '<div class="empty-chats" style="color:rgba(255,255,255,0.4);">¡Sé el primero en escribir! 👋</div>';
     } else {
-      messages.forEach(msg => appendMessage(msg));
+      messages.forEach(msg => {
+        appendMessage(msg);
+        // Si el mensaje es recibido y no está leído, marcarlo como leído ahora que abrimos el chat
+        const senderId = msg.senderId ?? msg.sender_id;
+        if (senderId !== currentUser.id && msg.status !== 'read') {
+          socket?.send(JSON.stringify({ type: "read", messageId: msg.id }));
+        }
+      });
       scrollToBottom();
     }
   } catch (err) {
@@ -266,6 +273,8 @@ function appendMessage(msg) {
   });
 
   messagesContainer.appendChild(el);
+}
+
 function getStatusIconHtml(status) {
   switch (status) {
     case 'read':
